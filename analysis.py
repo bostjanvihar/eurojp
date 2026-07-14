@@ -24,6 +24,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+import predict
+
 ROOT = Path(__file__).parent
 DATA = ROOT / "data" / "eurojackpot.csv"
 DOCS = ROOT / "docs"
@@ -33,6 +35,7 @@ MAIN_POOL = range(1, 51)
 EURO_POOL = range(1, 13)
 CURRENT_ERA = "2022-03-25"  # euro numbers extended to 1-12, Tuesday draws added
 HOT_WINDOW = 52             # ~6 months of draws (2 per week)
+TIMELINE_WINDOW = 50        # rolling window (in draws) for the timeline chart
 
 plt.rcParams.update({
     "figure.facecolor": "white",
@@ -140,7 +143,7 @@ def chart_frequency(freq, title, name, highlight=10):
 
 def chart_timeline(df, freq_main):
     top = freq_main.head(6).number.tolist()
-    window = 100
+    window = TIMELINE_WINDOW
     fig, ax = plt.subplots(figsize=(13, 4.5))
     for n in top:
         hit = df[["n1", "n2", "n3", "n4", "n5"]].eq(n).any(axis=1).astype(int)
@@ -206,6 +209,44 @@ def chart_odd_even(df):
     ax.set_title("Odd/even split of the five main numbers")
     plt.setp(ax.get_xticklabels(), rotation=20)
     save(fig, "odd_even.png")
+
+
+def chart_holt_forecast(probs, k, expected_pct, title, name):
+    """Bar chart of Holt-predicted next-draw probability for every number."""
+    top_cut = probs.nlargest(k).min()
+    colors = ["#6366f1" if p >= top_cut else "#9ca3af" for p in probs]
+    fig, ax = plt.subplots(figsize=(13, 4.2))
+    ax.bar(probs.index, probs * 100, color=colors)
+    ax.axhline(expected_pct, color="black", ls="--", lw=1,
+               label=f"uniform expectation ({expected_pct:.1f}%)")
+    ax.set_xticks(list(probs.index))
+    ax.set_xlabel("Number")
+    ax.set_ylabel("Predicted probability (%)")
+    ax.set_title(title)
+    ax.legend()
+    save(fig, name)
+
+
+def chart_trend_continuation(df, levels_main, probs):
+    """Holt level curves for the trend-picked numbers vs their raw rolling rate,
+    with the one-step-ahead forecast marked - literally continuing fig 3."""
+    fig, ax = plt.subplots(figsize=(13, 4.5))
+    cmap = plt.get_cmap("tab10")
+    tail = min(300, len(df))          # ~last 3 years; full history is in fig 3
+    dates = df.date.iloc[-tail:]
+    for i, (n, hist) in enumerate(levels_main.items()):
+        c = cmap(i)
+        raw = df[["n1", "n2", "n3", "n4", "n5"]].eq(n).any(axis=1).astype(float)
+        ax.plot(dates, raw.rolling(TIMELINE_WINDOW, min_periods=10).mean().iloc[-tail:] * 100,
+                color=c, alpha=0.25, lw=1)
+        ax.plot(dates, hist[-tail:] * 100, color=c, lw=1.8, label=f"#{n}")
+        ax.scatter([df.date.iloc[-1]], [probs[n] * 100], color=c, marker="D", zorder=5)
+    ax.axhline(10, color="black", ls="--", lw=1, label="expected (10%)")
+    ax.set_ylabel("Hit rate (%)")
+    ax.set_title(f"Trend method: Holt-smoothed hit rate (bold) vs rolling "
+                 f"{TIMELINE_WINDOW}-draw rate (faint); diamonds = next-draw forecast")
+    ax.legend(ncol=4, fontsize=9)
+    save(fig, "trend_continuation.png")
 
 
 # --------------------------------------------------------------------------- #
@@ -293,6 +334,35 @@ and 9&ndash;10 in 2014, so all-time euro comparisons are not apples-to-apples.</
 <b>Overdue-leaning pick:</b> {ctx['pick_due']} &nbsp;+&nbsp; euro {ctx['pick_due_euro']}<br>
 <b>Balanced pick</b> (frequent + overdue + typical sum/odd-even profile): {ctx['pick_mix']} &nbsp;+&nbsp; euro {ctx['pick_mix_euro']}</p>
 </div>
+
+<h2>8 &middot; Three algorithmic predictions for the next draw</h2>
+<p>All three are recomputed from the complete history after every draw.</p>
+<div class="picks">
+<p><b>1 &middot; Equalizer</b> &mdash; the ticket that would push the all-time number
+distribution closest to perfectly even (minimises the variance of the 50 counts;
+ties broken by longest absence):<br>
+<span style="font-size:1.25em"><b>{ctx['pred_eq']}</b> + euro <b>{ctx['pred_eq_euro']}</b></span></p>
+<p><b>2 &middot; Maintainer</b> &mdash; the ticket that would keep the current all-time
+distribution shape most unchanged (minimises the shift of the normalised
+frequency vector; ties broken by most recent appearance):<br>
+<span style="font-size:1.25em"><b>{ctx['pred_mt']}</b> + euro <b>{ctx['pred_mt_euro']}</b></span></p>
+<p><b>3 &middot; Trend continuation</b> &mdash; Holt double-exponential smoothing
+(level + slope, half-life {ctx['half_life']} draws) of every number's hit rate,
+extrapolated one draw ahead; the five highest forecast probabilities win:<br>
+<span style="font-size:1.25em"><b>{ctx['pred_tr']}</b> + euro <b>{ctx['pred_tr_euro']}</b></span></p>
+</div>
+<img src="charts/holt_forecast_main.png" alt="Holt forecast, main numbers">
+<img src="charts/holt_forecast_euro.png" alt="Holt forecast, euro numbers">
+<img src="charts/trend_continuation.png" alt="Trend continuation">
+
+<h3>Prediction scorecard</h3>
+{ctx['scorecard']}
+<p class="meta">Every prediction is stored before the draw and scored automatically once
+the targeted draw is in. "avg_hits" is the average number of correct numbers per
+ticket; pure chance expects <b>0.5</b> hits for main numbers (5 picks from 50) and
+<b>0.333</b> for euro numbers (2 picks from 12). Watch this table to see whether any
+method ever separates itself from luck.</p>
+
 <div class="warn"><b>Honesty note:</b> Eurojackpot draws are independent random events.
 No past pattern changes the odds of any future combination &mdash; every ticket has the same
 1 in 139,838,160 jackpot chance. The picks above simply summarise historical tendencies;
@@ -373,6 +443,23 @@ def main():
     odd = df[["n1", "n2", "n3", "n4", "n5"]].apply(lambda r: (r % 2).sum(), axis=1)
     oe_pct = round(odd.isin([2, 3]).mean() * 100)
 
+    # ---- algorithmic predictions + scorecard ----
+    pred = predict.run(df, era)
+    picks3 = pred["picks"]
+    chart_holt_forecast(pred["probs_main"], 5, 10.0,
+                        "Trend method - predicted probability of each main number "
+                        "appearing in the NEXT draw (Holt forecast)",
+                        "holt_forecast_main.png")
+    chart_holt_forecast(pred["probs_euro"], 2, 100 * 2 / 12,
+                        "Trend method - predicted probability of each euro number "
+                        "appearing in the NEXT draw (current era)",
+                        "holt_forecast_euro.png")
+    chart_trend_continuation(df, pred["levels_main"], pred["probs_main"])
+    sc = pred["scorecard"]
+    scorecard_html = (html_table(sc) if not sc.empty else
+                      "<p><i>No scored predictions yet - the first scores appear "
+                      "after the next draw.</i></p>")
+
     last = df.iloc[-1]
     picks = informed_picks(freq_main, freq_euro_era, gaps, df)
     ctx = dict(
@@ -391,6 +478,14 @@ def main():
         overdue=html_table(gaps.head(10)),
         hot_window=HOT_WINDOW,
         oe_pct=oe_pct,
+        pred_eq=" - ".join(map(str, picks3[("equalize", "main")])),
+        pred_eq_euro=" & ".join(map(str, picks3[("equalize", "euro")])),
+        pred_mt=" - ".join(map(str, picks3[("maintain", "main")])),
+        pred_mt_euro=" & ".join(map(str, picks3[("maintain", "euro")])),
+        pred_tr=" - ".join(map(str, picks3[("trend", "main")])),
+        pred_tr_euro=" & ".join(map(str, picks3[("trend", "euro")])),
+        half_life=predict.HALF_LIFE,
+        scorecard=scorecard_html,
         **picks,
     )
     (DOCS / "index.html").write_text(build_html(ctx), encoding="utf-8")

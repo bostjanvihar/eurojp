@@ -22,6 +22,34 @@ Everything runs on GitHub's free tier — no server, no credit card.
 | Pattern stats | Sum distribution, odd/even split |
 | Hot / cold / overdue | Last-52-draw hot & cold lists, gap analysis |
 | Informed picks | Three example tickets (frequency-, overdue- and balance-based) |
+| **Algorithmic predictions** | Three methods, recomputed from full history on every update |
+| **Prediction scorecard** | Every prediction stored pre-draw and auto-scored after it |
+
+### The three prediction methods (`predict.py`)
+
+1. **Equalizer** — the ticket that would make the all-time count distribution
+   as even as possible after the next draw. Solved via the explicit
+   variance-delta objective (provably: the least-drawn numbers; ties broken by
+   longest absence).
+2. **Maintainer** — the ticket that would keep the current all-time
+   distribution shape most unchanged (minimal shift of the normalised
+   frequency vector; provably: the most-drawn numbers; ties broken by most
+   recent appearance).
+3. **Trend continuation** — Holt double exponential smoothing (level + slope)
+   of every number's per-draw hit indicator, extrapolated one draw ahead;
+   forecasts a next-draw probability for all 50 numbers (charted) and picks
+   the top five. Tune `HALF_LIFE` (default 20 draws — the smoothing memory,
+   playing the role of a rolling window) and `TREND_HALF_LIFE` (slope memory)
+   at the top of `predict.py`. `TIMELINE_WINDOW` in `analysis.py` controls the
+   rolling window of the display charts.
+
+Euro numbers get the same three treatments using current-era data (pool 1–12).
+
+The **scorecard** (`data/predictions.csv`) logs each method's ticket before
+every draw and scores it automatically once the draw is scraped. The dashboard
+shows average hits per method vs the chance expectation (0.5 main-number hits,
+0.333 euro hits) — over time this empirically tests whether any method beats
+luck. (Spoiler from probability theory: over a long run, none should.)
 
 Outputs land in `docs/`: `index.html` (dashboard), `charts/*.png`,
 `eurojackpot.xlsx` (draws + all stat tables), and CSV versions of every table.
