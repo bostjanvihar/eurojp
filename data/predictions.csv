@@ -29,9 +29,15 @@ made_after_draw,method,pool,numbers,target_date,hits
 2026-07-24,maintain,euro,3 5,2026-07-28,1
 2026-07-24,trend,main,6 17 37 42 47,2026-07-28,0
 2026-07-24,trend,euro,5 7,2026-07-28,1
-2026-07-28,equalize,main,5 28 36 48 50,,
-2026-07-28,maintain,main,17 20 21 34 35,,
-2026-07-28,equalize,euro,4 11,,
-2026-07-28,maintain,euro,3 5,,
-2026-07-28,trend,main,6 17 25 37 47,,
-2026-07-28,trend,euro,5 7,,
+2026-07-28,equalize,main,5 28 36 48 50,2026-07-31,0
+2026-07-28,maintain,main,17 20 21 34 35,2026-07-31,1
+2026-07-28,equalize,euro,4 11,2026-07-31,1
+2026-07-28,maintain,euro,3 5,2026-07-31,0
+2026-07-28,trend,main,6 17 25 37 47,2026-07-31,0
+2026-07-28,trend,euro,5 7,2026-07-31,0
+2026-07-31,equalize,main,5 28 36 48 50,,
+2026-07-31,maintain,main,17 20 21 34 35,,
+2026-07-31,equalize,euro,4 11,,
+2026-07-31,maintain,euro,3 5,,
+2026-07-31,trend,main,4 17 37 41 47,,
+2026-07-31,trend,euro,5 7,,
